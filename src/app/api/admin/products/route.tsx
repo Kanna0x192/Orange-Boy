@@ -18,6 +18,12 @@ export async function GET() {
       cache: "no-store",
     });
     const text = await r.text();
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json(
+        { data: [], meta: { source: "strapi", count: 0 } },
+        { status: r.status }
+      );
+    }
     try {
       const json = JSON.parse(text);
       if (r.ok) {
@@ -103,6 +109,12 @@ export async function POST(req: NextRequest) {
     });
 
     const text = await r.text();
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json(
+        { data: null, meta: { source: "strapi" } },
+        { status: r.status }
+      );
+    }
     try {
       const json = JSON.parse(text);
       return NextResponse.json(json, { status: r.status });

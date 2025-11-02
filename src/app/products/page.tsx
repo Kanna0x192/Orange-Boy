@@ -54,17 +54,21 @@ export default async function ProductsPage({
   // ✅ 안전하게 data 처리
   const data: StrapiItem[] = Array.isArray(json?.data) ? json.data : [];
 
-  const products: Product[] = data.map((it) => ({
-    id: it.id,
-    name: it.attributes.name,
-    price: it.attributes.price,
-    description: it.attributes.description ?? null,
-    category: it.attributes.category ?? null,
-    orderFormUrl: it.attributes.orderFormUrl ?? null,
-    image: it.attributes.image?.data?.attributes?.url
-      ? { url: `${CMS}${it.attributes.image.data.attributes.url}` }
-      : null,
-  }));
+  const products: Product[] = data
+    .filter((it): it is StrapiItem & { attributes: StrapiItem["attributes"] } =>
+      Boolean(it && it.attributes)
+    )
+    .map((it) => ({
+      id: it.id,
+      name: it.attributes.name,
+      price: it.attributes.price,
+      description: it.attributes.description ?? null,
+      category: it.attributes.category ?? null,
+      orderFormUrl: it.attributes.orderFormUrl ?? null,
+      image: it.attributes.image?.data?.attributes?.url
+        ? { url: `${CMS}${it.attributes.image.data.attributes.url}` }
+        : null,
+    }));
 
   // ✅ 페이지 렌더링
   return (

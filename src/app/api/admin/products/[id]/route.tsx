@@ -82,6 +82,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     });
 
     const text = await r.text();
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json(
+        { data: null, meta: { source: "strapi" } },
+        { status: r.status }
+      );
+    }
     try {
       const json = JSON.parse(text);
       return NextResponse.json(json, { status: r.status });
@@ -118,10 +124,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     });
 
     const text = await r.text();
+    if (!text || text.trim().length === 0) {
+      return new NextResponse(null, { status: r.status });
+    }
     try {
-      if (!text) {
-        return new NextResponse(null, { status: r.status });
-      }
       const json = JSON.parse(text);
       return NextResponse.json(json, { status: r.status });
     } catch {

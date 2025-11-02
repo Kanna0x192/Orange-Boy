@@ -12,9 +12,16 @@ export async function strapiFetch(path: string, init: RequestInit = {}) {
     },
     cache: 'no-store',
   });
+  const raw = await res.text().catch(() => '');
   if (!res.ok) {
-    const text = await res.text().catch(()=> '');
-    throw new Error(`Strapi ${res.status}: ${text}`);
+    throw new Error(`Strapi ${res.status}: ${raw}`);
   }
-  return res.json();
+  if (!raw || raw.trim().length === 0) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Strapi parse error: ${err}`);
+  }
 }

@@ -49,7 +49,17 @@ export default function AdminProductsManager() {
         setProducts([]);
         return;
       }
-      const json = await res.json();
+      let json: any = { data: [] };
+      const rawText = await res.text();
+      if (rawText && rawText.trim().length > 0) {
+        try {
+          json = JSON.parse(rawText);
+        } catch (err) {
+          console.error("상품 목록 JSON 파싱 오류:", err, rawText);
+          setProducts([]);
+          return;
+        }
+      }
       setUsingFallback(json?.meta?.source === "fallback");
       setProducts(
         json.data?.map((d: any) => ({

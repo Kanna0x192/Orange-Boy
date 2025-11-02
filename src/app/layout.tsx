@@ -8,8 +8,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body>
+        {/* next-auth 세션 유지용 provider */}
         <SessionProvider>
+          {/* 모든 페이지 상단에 고정되는 배너 */}
           <Header />
+          {/* 페이지 내용 */}
           {children}
         </SessionProvider>
       </body>

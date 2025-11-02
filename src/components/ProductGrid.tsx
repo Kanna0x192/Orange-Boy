@@ -21,12 +21,36 @@ export default function ProductGrid({ products }: { products: Product[] }) {
 
       {current && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={()=>setCurrent(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-lg" onClick={e=>e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-orange-600">{current.name}</h2>
-            <p className="mt-2 text-gray-700">₩{Number(current.price ?? 0).toLocaleString()}</p>
-            {current.description && <p className="mt-2 text-gray-600">{current.description}</p>}
-            <div className="mt-4 flex justify-end">
-              <button onClick={()=>setCurrent(null)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50">Close</button>
+          <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-lg" onClick={e=>e.stopPropagation()}>
+            {current.image?.url ? (
+              <img src={current.image.url} alt={current.name} className="h-60 w-full object-cover" />
+            ) : (
+              <div className="h-60 w-full bg-gray-200 grid place-content-center text-gray-500 text-sm">No Image</div>
+            )}
+            <div className="p-5">
+              <h2 className="text-2xl font-bold text-orange-600">{current.name}</h2>
+              <p className="mt-2 text-gray-700 text-lg">₩{Number(current.price ?? 0).toLocaleString()}</p>
+              {current.category && (
+                <p className="mt-1 text-sm uppercase tracking-wide text-orange-400">
+                  {current.category.toUpperCase()}
+                </p>
+              )}
+              {current.description && <p className="mt-4 text-gray-600 leading-relaxed">{current.description}</p>}
+              <div className="mt-6 flex justify-between gap-3">
+                <button onClick={()=>setCurrent(null)} className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50">닫기</button>
+                {current.orderFormUrl ? (
+                  <a
+                    href={current.orderFormUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+                  >
+                    주문서 작성하기
+                  </a>
+                ) : (
+                  <span className="self-center text-sm text-gray-400">주문서 링크가 준비 중입니다.</span>
+                )}
+              </div>
             </div>
           </div>
         </div>

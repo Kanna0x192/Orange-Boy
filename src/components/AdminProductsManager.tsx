@@ -1,81 +1,128 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { Product } from "@/types/product";
+import { useEffect, useState } from "react";
 
-const CATS = ["all", "food", "snack", "tea", "juice"] as const;
-
-type StrapiResp = {
-  data: any[];
-  meta?: any;
+type Product = {
+  id?: number;
+  name: string;
+  price: number;
+  category?: string; // "food" | "snack" | "tea" | "juice"
+  description?: string;
+  image?: { id: number; url: string };
+  orderFormUrl?: string;
 };
 
+// 화면에 보여줄 카테고리 선택지
+const CATEGORIES = ["Food", "Snack", "Tea", "Juice"] as const;
+// 클라이언트에서 이미지 표시용 CMS 베이스 URL
+const CMS = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:1337";
+
 export default function AdminProductsManager() {
-  const [category, setCategory] = useState<(typeof CATS)[number]>("all");
-  const [items, setItems] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Product | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<Partial<Product>>({});
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<string>("all");
+  const [usingFallback, setUsingFallback] = useState(false);
 
-  const CMS = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:1337";
+  const filters = ["all", ...CATEGORIES] as const;
 
-  const title = useMemo(() => (category === "all" ? "All" : category.toUpperCase()), [category]);
+  const matchesFilter = (product: Product) => {
+    if (filter.toLowerCase() === "all") return true;
+    const key = (product.category ?? "").toString().toLowerCase();
+    return key === filter.toLowerCase();
+  };
 
-  async function fetchList() {
-    setLoading(true);
+  const resolveImageUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) return url;
+    return `${CMS}${url}`;
+  };
+
+  // 상품 목록 불러오기 (에러 안전)
+  const fetchProducts = async () => {
     try {
-      const qs = category ? `?category=${category}` : "";
-      const res = await fetch(`/api/admin/products${qs}`, { cache: "no-store" });
-      const json: StrapiResp = await res.json();
-      const mapped: Product[] = (json.data ?? []).map((it: any) => ({
-        id: it.id,
-        name: it.attributes?.name,
-        price: it.attributes?.price,
-        category: it.attributes?.category,
-        description: it.attributes?.description ?? null,
-        image: it.attributes?.image?.data?.attributes?.url
-          ? { url: `${CMS}${it.attributes.image.data.attributes.url}` }
-          : null,
-        orderFormUrl: it.attributes?.orderFormUrl ?? null,
-      }));
-      setItems(mapped);
+      const res = await fetch("/api/admin/products", { cache: "no-store" });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error("상품 목록 API 오류:", res.status, t);
+        setProducts([]);
+        return;
+      }
+      const json = await res.json();
+      setUsingFallback(json?.meta?.source === "fallback");
+      setProducts(
+        json.data?.map((d: any) => ({
+          id: d.id,
+          name: d.attributes.name,
+          price: d.attributes.price,
+          category: d.attributes.category ?? undefined,
+          description: d.attributes.description,
+          orderFormUrl: d.attributes.orderFormUrl,
+          image: d.attributes.image?.data
+            ? {
+                id: d.attributes.image.data.id,
+                url: d.attributes.image.data.attributes.url,
+              }
+            : undefined,
+        })) ?? []
+      );
     } catch (e) {
-      console.error(e);
-      alert("목록을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
+      console.error("상품 목록 로드 실패:", e);
+      setProducts([]);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category]);
+    fetchProducts();
+  }, []);
 
-  function openCreate() {
-    setEditing(null);
-    setForm({ name: "", price: 0, category, description: "", orderFormUrl: "" });
-    setFormOpen(true);
-  }
+  // 이미지 업로드 (Strapi로 프록시)
+  const handleImageUpload = async (file: File) => {
+    const fd = new FormData();
+    fd.append("files", file);
+    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`이미지 업로드 실패: ${res.status} ${t}`);
+    }
+    const json = await res.json();
+    return json[0]; // { id, url, ... }
+  };
 
-  function openEdit(p: Product) {
-    setEditing(p);
-    setForm(p);
-    setFormOpen(true);
-  }
+  const submitForm = async () => {
+    if (!form.name || form.name.trim().length === 0) {
+      alert("상품명을 입력해 주세요.");
+      return;
+    }
+    if (form.price == null || Number.isNaN(form.price)) {
+      alert("가격을 입력해 주세요.");
+      return;
+    }
+    if (!form.category) {
+      alert("카테고리를 선택해 주세요.");
+      return;
+    }
 
-  async function submitForm() {
-    const payload: any = {
-      name: form.name,
-      price: Number(form.price ?? 0),
-      category: (form.category === "all" ? null : form.category) ?? null,
-      description: form.description ?? null,
-      orderFormUrl: form.orderFormUrl ?? null,
-    };
-
+    setLoading(true);
     try {
+      // 이미지 새로 선택했으면 업로드
+      let imageId = form.image?.id;
+      const anyForm = form as any;
+      if (anyForm.newImageFile instanceof File) {
+        const uploaded = await handleImageUpload(anyForm.newImageFile);
+        imageId = uploaded.id;
+      }
+
+      const payload = {
+        name: form.name,
+        price: form.price,
+        description: form.description ?? null,
+        orderFormUrl: form.orderFormUrl ?? null,
+        category: form.category ?? null,
+        imageId: imageId ?? null,
+      };
+
       const res = await fetch(
         editing ? `/api/admin/products/${editing.id}` : `/api/admin/products`,
         {
@@ -84,141 +131,229 @@ export default function AdminProductsManager() {
           body: JSON.stringify(payload),
         }
       );
-      if (!res.ok) throw new Error(await res.text());
-      setFormOpen(false);
-      await fetchList();
-    } catch (e) {
-      console.error(e);
-      alert("저장 중 오류가 발생했습니다.");
-    }
-  }
+      
+      if (!res.ok) {
+        const detailText = await res.text();
+        let detail = detailText;
+        try {
+          const j = JSON.parse(detailText);
+          detail = JSON.stringify(j, null, 2);
+        } catch {}
+        alert(`상품 저장 실패: ${res.status}\n${detail}`);
+        return;
+      }
 
-  async function remove(id: number) {
-    if (!confirm("정말 삭제할까요?")) return;
-    try {
-      const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
-      await fetchList();
-    } catch (e) {
-      console.error(e);
-      alert("삭제 중 오류가 발생했습니다.");
+      alert(editing ? "상품 수정 완료" : "상품 추가 완료");
+      setForm({});
+      setEditing(null);
+      fetchProducts();
+    } catch (err) {
+      console.error(err);
+      alert("상품 저장 중 오류가 발생했어요.");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
+
+  // 편집 모드 진입 시 폼 채우기
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        id: editing.id,
+        name: editing.name,
+        price: editing.price,
+        description: editing.description,
+        orderFormUrl: editing.orderFormUrl,
+        category: editing.category,
+        image: editing.image,
+      });
+    }
+  }, [editing]);
 
   return (
-    <section>
-      {/* 카테고리 탭 */}
-      <div className="flex gap-2 mb-6">
-        {CATS.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={`px-3 py-1 rounded-full border ${
-              category === c ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300"
-            }`}
-          >
-            {c === "all" ? "All" : c}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <button
-          onClick={openCreate}
-          className="rounded bg-orange-500 text-white px-4 py-2 font-semibold hover:bg-orange-600"
-        >
-          상품 추가
-        </button>
-      </div>
+    <div className="p-8 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold text-orange-600 mb-4">상품 관리</h1>
 
-      <h2 className="text-xl font-bold text-orange-600 mb-3">{title} Products</h2>
-
-      {/* 목록 */}
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
-      ) : items.length ? (
-        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((p) => (
-            <li key={p.id} className="bg-white rounded-xl p-4 shadow">
-              {p.image?.url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.image.url} alt={p.name} className="w-full h-40 object-cover rounded-md" />
-              ) : (
-                <div className="w-full h-40 bg-gray-200 rounded-md grid place-content-center text-gray-500">No Image</div>
-              )}
-              <div className="mt-2">
-                <div className="font-bold">{p.name}</div>
-                <div className="text-gray-600">₩{Number(p.price).toLocaleString()}</div>
-                <div className="text-gray-500 text-sm">{p.category || "-"}</div>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => openEdit(p)} className="px-3 py-1 rounded bg-orange-400 text-white hover:bg-orange-500">
-                  수정
-                </button>
-                <button onClick={() => remove(p.id)} className="px-3 py-1 rounded bg-gray-300 text-gray-800 hover:bg-gray-400">
-                  삭제
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-gray-500">상품이 없습니다.</p>
+      {usingFallback && (
+        <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
+          Strapi 인증 정보를 찾을 수 없어 메모리 기반 테스트 데이터로 동작 중입니다. 서버 재시작 시 데이터가 초기화됩니다.
+        </div>
       )}
 
-      {/* 등록/수정 폼 모달(간단 구현) */}
-      {formOpen && (
-        <div className="fixed inset-0 bg-black/40 grid place-items-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-5 shadow-lg">
-            <h3 className="text-lg font-bold mb-3">{editing ? "상품 수정" : "상품 추가"}</h3>
-            <div className="grid gap-3">
-              <input
-                className="border rounded px-3 py-2"
-                placeholder="상품명"
-                value={form.name ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+      {/* 상품 입력/수정 폼 */}
+      <div className="bg-white p-4 rounded-lg shadow mb-8 space-y-3">
+        <input
+          className="border p-2 w-full rounded"
+          placeholder="상품명"
+          value={form.name ?? ""}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
+        />
+        <input
+          className="border p-2 w-full rounded"
+          placeholder="가격"
+          type="number"
+          value={form.price ?? ""}
+          onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+          required
+        />
+
+        {/* 🔽 카테고리 드롭다운(선택형) */}
+        <select
+          className="border p-2 rounded w-full"
+          value={form.category ?? ""}
+          onChange={(e) => setForm({ ...form, category: e.target.value })}
+          required
+        >
+          <option value="">카테고리 선택</option>
+          {CATEGORIES.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
+          ))}
+        </select>
+
+        <textarea
+          className="border p-2 w-full rounded"
+          placeholder="상품 설명"
+          value={form.description ?? ""}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
+
+        <input
+          className="border p-2 w-full rounded"
+          placeholder="주문서 URL (선택)"
+          value={form.orderFormUrl ?? ""}
+          onChange={(e) => setForm({ ...form, orderFormUrl: e.target.value })}
+        />
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) =>
+            setForm({
+              ...form,
+              newImageFile: e.target.files?.[0],
+            } as any)
+          }
+        />
+
+        <div className="flex gap-3">
+          <button
+            disabled={loading}
+            onClick={submitForm}
+            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:opacity-60"
+          >
+            {editing ? "상품 수정" : "상품 추가"}
+          </button>
+
+          {editing && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setForm({});
+              }}
+              className="px-4 py-2 rounded border"
+            >
+              취소
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 상품 리스트 */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {filters.map((cat) => {
+          const isAll = cat === "all";
+          const active = filter.toLowerCase() === cat.toLowerCase();
+          const label = isAll ? "All" : cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setFilter(cat)}
+              className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                active
+                  ? "border-orange-500 bg-orange-500 text-white"
+                  : "border-orange-200 bg-white text-orange-500 hover:border-orange-400"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {products.filter(matchesFilter).map((p) => (
+          <div
+            key={p.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => setEditing(p)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setEditing(p);
+            }}
+            className={`bg-white p-3 rounded shadow transition hover:shadow-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+              editing?.id === p.id ? "ring-2 ring-orange-400" : ""
+            }`}
+          >
+            {p.image && (
+              <img
+                src={resolveImageUrl(p.image.url)}
+                alt={p.name}
+                className="rounded mb-2 w-full aspect-square object-cover"
               />
-              <input
-                className="border rounded px-3 py-2"
-                type="number"
-                placeholder="가격"
-                value={form.price ?? 0}
-                onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))}
-              />
-              <select
-                className="border rounded px-3 py-2"
-                value={form.category ?? "all"}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              >
-                {CATS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <textarea
-                className="border rounded px-3 py-2"
-                placeholder="설명"
-                rows={3}
-                value={form.description ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              />
-              <input
-                className="border rounded px-3 py-2"
-                placeholder="주문서 URL (선택)"
-                value={form.orderFormUrl ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, orderFormUrl: e.target.value }))}
-              />
+            )}
+            <div className="font-semibold text-orange-600">{p.name}</div>
+            <div className="text-gray-700">₩{p.price.toLocaleString()}</div>
+            <div className="text-xs text-gray-400 uppercase">
+              {p.category ? p.category.toUpperCase() : "-"}
             </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setFormOpen(false)} className="px-4 py-2 rounded bg-gray-200">
-                취소
+            {p.orderFormUrl && (
+              <a
+                href={p.orderFormUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block text-xs text-orange-500 underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                주문서 링크 열기
+              </a>
+            )}
+
+            <div className="mt-3 flex gap-3">
+              <button
+                className="text-blue-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(p);
+                }}
+              >
+                수정
               </button>
-              <button onClick={submitForm} className="px-4 py-2 rounded bg-orange-500 text-white">
-                저장
+              <button
+                className="text-red-600"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!confirm("삭제하시겠습니까?")) return;
+                  const res = await fetch(`/api/admin/products/${p.id}`, {
+                    method: "DELETE",
+                  });
+                  if (!res.ok) {
+                    const t = await res.text();
+                    alert(`삭제 실패: ${res.status}\n${t}`);
+                    return;
+                  }
+                  fetchProducts();
+                }}
+              >
+                삭제
               </button>
             </div>
           </div>
-        </div>
-      )}
-    </section>
+        ))}
+      </div>
+    </div>
   );
 }

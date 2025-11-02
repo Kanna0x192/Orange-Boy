@@ -5,38 +5,14 @@ const STRAPI_URL = process.env.STRAPI_URL;
 const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const HAS_STRAPI = Boolean(STRAPI_URL && STRAPI_TOKEN);
 
-// 목록
-export async function GET() {
-  if (!HAS_STRAPI) {
-    const { serializeProductCollection } = await import("@/lib/fallbackStore");
-    return NextResponse.json(serializeProductCollection(), { status: 200 });
-  }
-
-  try {
-    const r = await fetch(`${STRAPI_URL}/api/products?populate=*`, {
-      headers: { Authorization: `Bearer ${STRAPI_TOKEN}` },
-      cache: "no-store",
-    });
-    const text = await r.text();
-    try {
-      const json = JSON.parse(text);
-      if (r.ok) {
-        return NextResponse.json(json, { status: r.status });
-      }
-      return NextResponse.json(json, { status: r.status });
-    } catch {
-      console.error("GET /products non-JSON:", text);
-      return NextResponse.json({ error: text }, { status: r.status });
-    }
-  } catch (e) {
-    console.error("GET /products failed:", e);
-    return NextResponse.json({ error: "strapi_fetch_failed" }, { status: 502 });
-  }
-}
-
-// 생성
-export async function POST(req: NextRequest) {
+// 수정
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   let payload: NormalizedProductPayload;
+  const id = Number(params.id);
+  if (!Number.isFinite(id)) {
+    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+  }
+
   try {
     const body = await req.json();
     const { name, price, description, orderFormUrl, category, imageId } = body;
@@ -52,11 +28,11 @@ export async function POST(req: NextRequest) {
           : Number(imageId),
     };
   } catch (e: any) {
-    console.error("POST /products body parse failed:", e);
+    console.error("PUT /products body parse failed:", e);
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  if (!payload.name || typeof payload.name !== "string") {
+  if (!payload.name) {
     return NextResponse.json({ error: "invalid_name" }, { status: 400 });
   }
   if (!Number.isFinite(payload.price)) {
@@ -72,9 +48,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!HAS_STRAPI) {
-    const { createFallbackProduct } = await import("@/lib/fallbackStore");
-    const fallback = createFallbackProduct(normalizedPayload);
-    return NextResponse.json(fallback, { status: 201 });
+    const { updateFallbackProduct } = await import("@/lib/fallbackStore");
+    const updated = updateFallbackProduct(id, normalizedPayload);
+    if (!updated) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    return NextResponse.json(updated, { status: 200 });
   }
 
   try {
@@ -93,8 +72,8 @@ export async function POST(req: NextRequest) {
       data.image = normalizedPayload.imageId;
     }
 
-    const r = await fetch(`${STRAPI_URL}/api/products`, {
-      method: "POST",
+    const r = await fetch(`${STRAPI_URL}/api/products/${params.id}`, {
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${STRAPI_TOKEN}`,
         "Content-Type": "application/json",
@@ -107,11 +86,50 @@ export async function POST(req: NextRequest) {
       const json = JSON.parse(text);
       return NextResponse.json(json, { status: r.status });
     } catch {
-      console.error("POST /products non-JSON:", text);
+      console.error("PUT /products non-JSON:", text);
       return NextResponse.json({ error: text }, { status: r.status });
     }
   } catch (e: any) {
-    console.error("POST /products failed:", e);
-    return NextResponse.json({ error: "strapi_create_failed" }, { status: 502 });
+    console.error("PUT /products failed:", e);
+    return NextResponse.json({ error: "strapi_update_failed" }, { status: 502 });
+  }
+}
+
+// 삭제
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const id = Number(params.id);
+  if (!Number.isFinite(id)) {
+    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+  }
+
+  if (!HAS_STRAPI) {
+    const { deleteFallbackProduct } = await import("@/lib/fallbackStore");
+    const removed = deleteFallbackProduct(id);
+    if (!removed) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    return new NextResponse(null, { status: 204 });
+  }
+
+  try {
+    const r = await fetch(`${STRAPI_URL}/api/products/${params.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${STRAPI_TOKEN}` },
+    });
+
+    const text = await r.text();
+    try {
+      if (!text) {
+        return new NextResponse(null, { status: r.status });
+      }
+      const json = JSON.parse(text);
+      return NextResponse.json(json, { status: r.status });
+    } catch {
+      console.error("DELETE /products non-JSON:", text);
+      return NextResponse.json({ error: text }, { status: r.status });
+    }
+  } catch (e: any) {
+    console.error("DELETE /products failed:", e);
+    return NextResponse.json({ error: "strapi_delete_failed" }, { status: 502 });
   }
 }

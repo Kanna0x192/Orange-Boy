@@ -38,6 +38,7 @@
 - **실시간 반영**: 모든 fetch 요청은 `cache: "no-store"`로 설정해 CMS 변경 사항 즉시 반영.
 - **오프라인 대체 데이터**: Strapi 인증/연결이 불가한 경우 메모리 기반 fallback 스토어가 동작해 관리자 CRUD와 업로드를 테스트 가능.
 - **카테고리 동기화**: Strapi 카테고리가 `Food/Snack/Tea/Juice` 대소문자 규칙을 따르므로 관리자 UI도 동일한 값으로 전송하며, 쿼리 파라미터는 자동으로 매핑.
+- **자동 번역 지원**: DeepL API를 통해 한국어 상품명/설명을 영어·중국어·일본어·프랑스어로 실시간 번역하고, 드롭다운으로 언어 전환 가능(베트남어는 현재 DeepL 미지원이라 원문 유지).
 
 ## 6. 데이터 & API
 - **데이터 모델(Product)**: `id`, `name`, `price`, `description`, `category`, `orderFormUrl`, `image(url)`.

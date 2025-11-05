@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { NormalizedProductPayload } from "@/lib/fallbackStore";
+import { translateTexts } from "@/lib/translate";
+import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
 
 const STRAPI_URL = process.env.STRAPI_URL;
 const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const HAS_STRAPI = Boolean(STRAPI_URL && STRAPI_TOKEN);
 
 // 목록
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const targetLang = (req.nextUrl.searchParams.get("lang") ?? DEFAULT_LANGUAGE) as LanguageCode;
+
   if (!HAS_STRAPI) {
     const { serializeProductCollection } = await import("@/lib/fallbackStore");
-    return NextResponse.json(serializeProductCollection(), { status: 200 });
+    const payload = serializeProductCollection();
+    if (targetLang !== DEFAULT_LANGUAGE && Array.isArray(payload?.data)) {
+      await applyTranslations(payload.data, targetLang);
+    }
+    return NextResponse.json(payload, { status: 200 });
   }
 
   try {
@@ -26,6 +34,9 @@ export async function GET() {
     }
     try {
       const json = JSON.parse(text);
+      if (targetLang !== DEFAULT_LANGUAGE && Array.isArray(json?.data)) {
+        await applyTranslations(json.data, targetLang);
+      }
       if (r.ok) {
         return NextResponse.json(json, { status: r.status });
       }
@@ -37,6 +48,49 @@ export async function GET() {
   } catch (e) {
     console.error("GET /products failed:", e);
     return NextResponse.json({ error: "strapi_fetch_failed" }, { status: 502 });
+  }
+}
+
+async function applyTranslations(items: any[], targetLang: LanguageCode) {
+  const names: string[] = [];
+  const nameIndices: number[] = [];
+  const descriptions: string[] = [];
+  const descriptionIndices: number[] = [];
+
+  items.forEach((item, idx) => {
+    const attrs = item?.attributes ?? item ?? {};
+    if (attrs?.name) {
+      names.push(attrs.name);
+      nameIndices.push(idx);
+    }
+    if (attrs?.description) {
+      descriptions.push(attrs.description);
+      descriptionIndices.push(idx);
+    }
+  });
+
+  if (names.length > 0) {
+    const translatedNames = await translateTexts(names, targetLang);
+    translatedNames.forEach((text, i) => {
+      const idx = nameIndices[i];
+      if (items[idx]?.attributes) {
+        items[idx].attributes.name = text;
+      } else {
+        items[idx].name = text;
+      }
+    });
+  }
+
+  if (descriptions.length > 0) {
+    const translatedDescriptions = await translateTexts(descriptions, targetLang);
+    translatedDescriptions.forEach((text, i) => {
+      const idx = descriptionIndices[i];
+      if (items[idx]?.attributes) {
+        items[idx].attributes.description = text;
+      } else {
+        items[idx].description = text;
+      }
+    });
   }
 }
 

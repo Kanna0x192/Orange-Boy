@@ -1,9 +1,14 @@
-'use client';
-import { useState } from 'react';
-import type { Product } from '@/types/product';
+"use client";
+import { useState } from "react";
+import type { Product } from "@/types/product";
+import { useTranslatedText } from "@/hooks/useTranslatedText";
 
 export default function ProductGrid({ products }: { products: Product[] }) {
   const [current, setCurrent] = useState<Product | null>(null);
+  const noImageText = useTranslatedText("No Image");
+  const closeText = useTranslatedText("Close");
+  const orderText = useTranslatedText("Place an order");
+  const orderMissingText = useTranslatedText("Order form link is not available yet.");
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -11,7 +16,7 @@ export default function ProductGrid({ products }: { products: Product[] }) {
           <button key={p.id} onClick={()=>setCurrent(p)} className="text-left bg-white rounded-lg shadow p-3 hover:shadow-lg transition">
             {p.image?.url
               ? <img src={p.image.url} alt={p.name} className="w-full h-40 object-cover rounded-md" />
-              : <div className="w-full h-40 bg-gray-200 rounded-md grid place-content-center text-gray-500">No Image</div>
+              : <div className="w-full h-40 bg-gray-200 rounded-md grid place-content-center text-gray-500">{noImageText}</div>
             }
             <h3 className="font-bold mt-2 text-orange-500">{p.name}</h3>
             <p className="text-gray-700">₩{Number(p.price ?? 0).toLocaleString()}</p>
@@ -25,7 +30,7 @@ export default function ProductGrid({ products }: { products: Product[] }) {
             {current.image?.url ? (
               <img src={current.image.url} alt={current.name} className="h-60 w-full object-cover" />
             ) : (
-              <div className="h-60 w-full bg-gray-200 grid place-content-center text-gray-500 text-sm">No Image</div>
+              <div className="h-60 w-full bg-gray-200 grid place-content-center text-gray-500 text-sm">{noImageText}</div>
             )}
             <div className="p-5">
               <h2 className="text-2xl font-bold text-orange-600">{current.name}</h2>
@@ -37,7 +42,7 @@ export default function ProductGrid({ products }: { products: Product[] }) {
               )}
               {current.description && <p className="mt-4 text-gray-600 leading-relaxed">{current.description}</p>}
               <div className="mt-6 flex justify-between gap-3">
-                <button onClick={()=>setCurrent(null)} className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50">닫기</button>
+                <button onClick={()=>setCurrent(null)} className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50">{closeText}</button>
                 {current.orderFormUrl ? (
                   <a
                     href={current.orderFormUrl}
@@ -45,10 +50,10 @@ export default function ProductGrid({ products }: { products: Product[] }) {
                     rel="noopener noreferrer"
                     className="rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
                   >
-                    주문서 작성하기
+                    {orderText}
                   </a>
                 ) : (
-                  <span className="self-center text-sm text-gray-400">주문서 링크가 준비 중입니다.</span>
+                  <span className="self-center text-sm text-gray-400">{orderMissingText}</span>
                 )}
               </div>
             </div>

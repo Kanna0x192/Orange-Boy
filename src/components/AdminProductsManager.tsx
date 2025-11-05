@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 
 type Product = {
   id?: number;
@@ -24,6 +25,7 @@ export default function AdminProductsManager() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>("all");
   const [usingFallback, setUsingFallback] = useState(false);
+  const { language } = useLanguage();
 
   const filters = ["all", ...CATEGORIES] as const;
 
@@ -40,9 +42,11 @@ export default function AdminProductsManager() {
   };
 
   // 상품 목록 불러오기 (에러 안전)
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/products", { cache: "no-store" });
+      const res = await fetch(`/api/admin/products?lang=${language}`, {
+        cache: "no-store",
+      });
       if (!res.ok) {
         const t = await res.text();
         console.error("상품 목록 API 오류:", res.status, t);
@@ -60,32 +64,58 @@ export default function AdminProductsManager() {
           return;
         }
       }
+
       setUsingFallback(json?.meta?.source === "fallback");
-      setProducts(
-        json.data?.map((d: any) => ({
-          id: d.id,
-          name: d.attributes.name,
-          price: d.attributes.price,
-          category: d.attributes.category ?? undefined,
-          description: d.attributes.description,
-          orderFormUrl: d.attributes.orderFormUrl,
-          image: d.attributes.image?.data
-            ? {
-                id: d.attributes.image.data.id,
-                url: d.attributes.image.data.attributes.url,
-              }
-            : undefined,
-        })) ?? []
-      );
+
+      const entries: any[] = Array.isArray(json?.data)
+        ? json.data
+        : json?.data
+        ? [json.data]
+        : [];
+
+      const normalized = entries
+        .map((d) => {
+          const attrs = (d && typeof d === "object" && "attributes" in d ? (d as any).attributes : d) ?? {};
+
+          const imageField = attrs?.image;
+          let image: { id: number | undefined; url: string } | undefined;
+          if (Array.isArray(imageField) && imageField.length > 0) {
+            const first = imageField[0];
+            if (first?.url) {
+              image = { id: first?.id, url: first.url };
+            }
+          } else if (imageField?.data) {
+            const mediaData = imageField.data;
+            const url = mediaData?.attributes?.url;
+            if (url) {
+              image = { id: mediaData?.id, url };
+            }
+          } else if (typeof imageField === "string" && imageField.length > 0) {
+            image = { id: undefined, url: imageField };
+          }
+
+          return {
+            id: d?.id ?? attrs?.id ?? undefined,
+            name: attrs?.name ?? "",
+            price: Number(attrs?.price ?? 0),
+            category: attrs?.category ?? undefined,
+            description: attrs?.description ?? undefined,
+            orderFormUrl: attrs?.orderFormUrl ?? undefined,
+            image,
+          };
+        })
+        .filter((p) => p?.id && p.name);
+
+      setProducts(normalized);
     } catch (e) {
       console.error("상품 목록 로드 실패:", e);
       setProducts([]);
     }
-  };
+  }, [language]);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   // 이미지 업로드 (Strapi로 프록시)
   const handleImageUpload = async (file: File) => {

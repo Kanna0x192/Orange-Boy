@@ -3,15 +3,17 @@ import type { NormalizedProductPayload } from "@/lib/fallbackStore";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
 
-const STRAPI_URL = process.env.STRAPI_URL;
-const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
-const HAS_STRAPI = Boolean(STRAPI_URL && STRAPI_TOKEN);
-
 // 목록
 export async function GET(req: NextRequest) {
   const targetLang = (req.nextUrl.searchParams.get("lang") ?? DEFAULT_LANGUAGE) as LanguageCode;
+  const strapiUrl = process.env.STRAPI_URL?.replace(/\/+$/, "");
+  const strapiToken = process.env.STRAPI_API_TOKEN || process.env.STRAPI_TOKEN;
 
-  if (!HAS_STRAPI) {
+  if (!strapiUrl || !strapiToken) {
+    console.error("STRAPI connection info missing", {
+      hasUrl: Boolean(strapiUrl),
+      hasToken: Boolean(strapiToken),
+    });
     const { serializeProductCollection } = await import("@/lib/fallbackStore");
     const payload = serializeProductCollection();
     if (targetLang !== DEFAULT_LANGUAGE && Array.isArray(payload?.data)) {
@@ -21,10 +23,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const r = await fetch(`${STRAPI_URL}/api/products?populate=*`, {
-      headers: { Authorization: `Bearer ${STRAPI_TOKEN}` },
+    console.log("Fetching products from Strapi:", `${strapiUrl}/api/products?populate=*`);
+    const r = await fetch(`${strapiUrl}/api/products?populate=*`, {
+      headers: { Authorization: `Bearer ${strapiToken}` },
       cache: "no-store",
+      signal: AbortSignal.timeout(10000),
     });
+    console.log("Strapi products status:", r.status);
     const text = await r.text();
     if (!text || text.trim().length === 0) {
       return NextResponse.json(
@@ -45,9 +50,15 @@ export async function GET(req: NextRequest) {
       console.error("GET /products non-JSON:", text);
       return NextResponse.json({ error: text }, { status: r.status });
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error("GET /products failed:", e);
-    return NextResponse.json({ error: "strapi_fetch_failed" }, { status: 502 });
+    return NextResponse.json(
+      {
+        error: "strapi_fetch_failed",
+        message: e?.message ?? "Unknown error",
+      },
+      { status: 502 }
+    );
   }
 }
 
@@ -97,6 +108,9 @@ async function applyTranslations(items: any[], targetLang: LanguageCode) {
 // 생성
 export async function POST(req: NextRequest) {
   let payload: NormalizedProductPayload;
+  const strapiUrl = process.env.STRAPI_URL?.replace(/\/+$/, "");
+  const strapiToken = process.env.STRAPI_TOKEN;
+
   try {
     const body = await req.json();
     const { name, price, description, orderFormUrl, category, imageId, locale } = body;
@@ -132,7 +146,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_name" }, { status: 400 });
   }
 
-  if (!HAS_STRAPI) {
+  if (!strapiUrl || !strapiToken) {
     const { createFallbackProduct } = await import("@/lib/fallbackStore");
     const fallback = createFallbackProduct(normalizedPayload);
     return NextResponse.json(fallback, { status: 201 });
@@ -154,10 +168,10 @@ export async function POST(req: NextRequest) {
       data.image = normalizedPayload.imageId;
     }
 
-    const r = await fetch(`${STRAPI_URL}/api/products`, {
+    const r = await fetch(`${strapiUrl}/api/products`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${STRAPI_TOKEN}`,
+        Authorization: `Bearer ${strapiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ data }),
@@ -182,3 +196,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "strapi_create_failed" }, { status: 502 });
   }
 }
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;

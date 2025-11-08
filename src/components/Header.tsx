@@ -183,6 +183,7 @@ function HeaderNavItem({ labelKey, language, hrefBase, onNavigate }: HeaderNavIt
     <Link
       href={href}
       onClick={onNavigate}
+      prefetch={false}
       className="text-xl font-semibold text-orange-500/90 hover:text-orange-600 transition-colors"
     >
       {label}

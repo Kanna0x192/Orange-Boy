@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import Header from "@/components/Header";
 import Head from "next/head";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { Suspense } from "react";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* next-auth 세션 유지용 provider */}
           <SessionProvider>
             {/* 모든 페이지 상단에 고정되는 배너 */}
-            <Header />
+            <Suspense fallback={null}>
+              <Header />
+            </Suspense>
             {/* 페이지 내용 */}
             {children}
           </SessionProvider>

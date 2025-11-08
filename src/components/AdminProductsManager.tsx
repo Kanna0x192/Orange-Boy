@@ -9,7 +9,7 @@ type Product = {
   price: number;
   category?: string; // "food" | "snack" | "tea" | "juice"
   description?: string;
-  image?: { id: number; url: string };
+  image?: { id?: number; url: string };
   orderFormUrl?: string;
   locale?: string;
   documentId?: string;

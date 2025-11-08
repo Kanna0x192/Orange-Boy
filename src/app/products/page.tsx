@@ -77,8 +77,13 @@ export default async function ProductsPage({
       const imageField = attrs?.image;
       if (Array.isArray(imageField) && imageField.length > 0) {
         imageUrl = imageField[0]?.url ?? null;
-      } else if (imageField?.data?.attributes?.url) {
-        imageUrl = imageField.data.attributes.url;
+      } else if (
+        typeof imageField === "object" &&
+        imageField !== null &&
+        "data" in imageField &&
+        (imageField as any)?.data?.attributes?.url
+      ) {
+        imageUrl = (imageField as any).data.attributes.url;
       } else if (typeof imageField === "string") {
         imageUrl = imageField;
       }

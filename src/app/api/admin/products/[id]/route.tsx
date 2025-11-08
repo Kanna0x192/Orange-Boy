@@ -8,14 +8,13 @@ const HAS_STRAPI = Boolean(STRAPI_URL && STRAPI_TOKEN);
 // 수정
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   let payload: NormalizedProductPayload;
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
-  }
+  const paramId = params.id;
+  const numericId = Number(paramId);
+  const hasNumericId = Number.isFinite(numericId);
 
   try {
     const body = await req.json();
-    const { name, price, description, orderFormUrl, category, imageId } = body;
+    const { name, price, description, orderFormUrl, category, imageId, locale } = body;
     payload = {
       name: typeof name === "string" ? name : "",
       price: typeof price === "number" ? price : Number(price),
@@ -26,6 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         imageId === null || imageId === undefined
           ? null
           : Number(imageId),
+      locale: typeof locale === "string" && locale.length > 0 ? locale : undefined,
     };
   } catch (e: any) {
     console.error("PUT /products body parse failed:", e);
@@ -48,8 +48,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   if (!HAS_STRAPI) {
+    if (!hasNumericId) {
+      return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+    }
     const { updateFallbackProduct } = await import("@/lib/fallbackStore");
-    const updated = updateFallbackProduct(id, normalizedPayload);
+    const updated = updateFallbackProduct(numericId, normalizedPayload);
     if (!updated) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
@@ -72,7 +75,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       data.image = normalizedPayload.imageId;
     }
 
-    const r = await fetch(`${STRAPI_URL}/api/products/${params.id}`, {
+    const r = await fetch(`${STRAPI_URL}/api/products/${paramId}`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${STRAPI_TOKEN}`,
@@ -103,14 +106,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 // 삭제
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
-  }
+  const paramId = params.id;
+  const numericId = Number(paramId);
+  const hasNumericId = Number.isFinite(numericId);
 
   if (!HAS_STRAPI) {
+    if (!hasNumericId) {
+      return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+    }
     const { deleteFallbackProduct } = await import("@/lib/fallbackStore");
-    const removed = deleteFallbackProduct(id);
+    const removed = deleteFallbackProduct(numericId);
     if (!removed) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
@@ -118,7 +123,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   }
 
   try {
-    const r = await fetch(`${STRAPI_URL}/api/products/${params.id}`, {
+    const r = await fetch(`${STRAPI_URL}/api/products/${paramId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${STRAPI_TOKEN}` },
     });

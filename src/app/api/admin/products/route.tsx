@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   let payload: NormalizedProductPayload;
   try {
     const body = await req.json();
-    const { name, price, description, orderFormUrl, category, imageId } = body;
+    const { name, price, description, orderFormUrl, category, imageId, locale } = body;
     payload = {
       name: typeof name === "string" ? name : "",
       price: typeof price === "number" ? price : Number(price),
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
         imageId === null || imageId === undefined
           ? null
           : Number(imageId),
+      locale: typeof locale === "string" && locale.length > 0 ? locale : undefined,
     };
   } catch (e: any) {
     console.error("POST /products body parse failed:", e);

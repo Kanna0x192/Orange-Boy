@@ -8,6 +8,7 @@ type MemoryProduct = {
   category: string | null;
   orderFormUrl: string | null;
   image: MemoryImage | null;
+  locale?: string | null;
 };
 
 export type NormalizedProductPayload = {
@@ -17,6 +18,7 @@ export type NormalizedProductPayload = {
   category: string | null;
   orderFormUrl: string | null;
   imageId: number | null;
+  locale?: string | null;
 };
 
 type FallbackStore = {
@@ -55,6 +57,7 @@ function productToAttributes(product: MemoryProduct) {
     description: product.description,
     category: product.category,
     orderFormUrl: product.orderFormUrl,
+    locale: product.locale ?? null,
     image: product.image
       ? {
           data: {
@@ -92,6 +95,7 @@ export function createFallbackProduct(payload: NormalizedProductPayload) {
     category: payload.category ?? null,
     orderFormUrl: payload.orderFormUrl ?? null,
     image: resolveImage(payload.imageId),
+    locale: payload.locale ?? null,
   };
   store.products.push(newProduct);
   return {
@@ -112,6 +116,7 @@ export function updateFallbackProduct(
   target.category = payload.category ?? null;
   target.orderFormUrl = payload.orderFormUrl ?? null;
   target.image = resolveImage(payload.imageId);
+  target.locale = payload.locale ?? target.locale ?? null;
   return {
     data: toStrapiEntity(target),
     meta: { source: "fallback" },

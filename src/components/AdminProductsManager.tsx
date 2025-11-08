@@ -11,6 +11,8 @@ type Product = {
   description?: string;
   image?: { id: number; url: string };
   orderFormUrl?: string;
+  locale?: string;
+  documentId?: string;
 };
 
 // 화면에 보여줄 카테고리 선택지
@@ -20,7 +22,7 @@ const CMS = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:1337";
 
 export default function AdminProductsManager() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [form, setForm] = useState<Partial<Product>>({});
+  const [form, setForm] = useState<Partial<Product>>({ locale: "ko" });
   const [editing, setEditing] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>("all");
@@ -96,12 +98,14 @@ export default function AdminProductsManager() {
 
           return {
             id: d?.id ?? attrs?.id ?? undefined,
+            documentId: d?.documentId ?? attrs?.documentId,
             name: attrs?.name ?? "",
             price: Number(attrs?.price ?? 0),
             category: attrs?.category ?? undefined,
             description: attrs?.description ?? undefined,
             orderFormUrl: attrs?.orderFormUrl ?? undefined,
             image,
+            locale: attrs?.locale ?? d?.locale ?? "ko",
           };
         })
         .filter((p) => p?.id && p.name);
@@ -161,10 +165,13 @@ export default function AdminProductsManager() {
         orderFormUrl: form.orderFormUrl ?? null,
         category: form.category ?? null,
         imageId: imageId ?? null,
+        locale: form.locale ?? "ko",
       };
 
       const res = await fetch(
-        editing ? `/api/admin/products/${editing.id}` : `/api/admin/products`,
+        editing
+          ? `/api/admin/products/${editing.documentId ?? editing.id}`
+          : `/api/admin/products`,
         {
           method: editing ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -184,7 +191,7 @@ export default function AdminProductsManager() {
       }
 
       alert(editing ? "상품 수정 완료" : "상품 추가 완료");
-      setForm({});
+      setForm({ locale: "ko" });
       setEditing(null);
       fetchProducts();
     } catch (err) {
@@ -200,12 +207,14 @@ export default function AdminProductsManager() {
     if (editing) {
       setForm({
         id: editing.id,
+        documentId: editing.documentId,
         name: editing.name,
         price: editing.price,
         description: editing.description,
         orderFormUrl: editing.orderFormUrl,
         category: editing.category,
         image: editing.image,
+        locale: editing.locale ?? "ko",
       });
     }
   }, [editing]);
@@ -377,7 +386,7 @@ export default function AdminProductsManager() {
                 onClick={async (e) => {
                   e.stopPropagation();
                   if (!confirm("삭제하시겠습니까?")) return;
-                  const res = await fetch(`/api/admin/products/${p.id}`, {
+                  const res = await fetch(`/api/admin/products/${p.documentId ?? p.id}`, {
                     method: "DELETE",
                   });
                   if (!res.ok) {

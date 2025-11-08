@@ -11,7 +11,7 @@ export default function ProductGrid({ products }: { products: Product[] }) {
   const orderMissingText = useTranslatedText("Order form link is not available yet.");
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {products.map(p => (
           <button key={p.id} onClick={()=>setCurrent(p)} className="text-left bg-white rounded-lg shadow p-3 hover:shadow-lg transition">
             {p.image?.url

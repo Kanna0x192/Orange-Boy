@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { NormalizedProductPayload } from "@/lib/fallbackStore";
-import { supabaseAdmin } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "lib/supabaseClient";
 
 // 단건 조회
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

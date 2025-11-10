@@ -4,12 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 
 type Product = {
-  id?: number;
+  id?: number | string;
   name: string;
   price: number;
   category?: string; // "food" | "snack" | "tea" | "juice"
   description?: string;
-  image?: { id?: number; url: string };
+  image?: { id?: number | string; url: string };
   orderFormUrl?: string;
   locale?: string;
   documentId?: string;
@@ -17,9 +17,6 @@ type Product = {
 
 // 화면에 보여줄 카테고리 선택지
 const CATEGORIES = ["Food", "Snack", "Tea", "Juice"] as const;
-// 클라이언트에서 이미지 표시용 CMS 베이스 URL
-const CMS = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:1337";
-
 export default function AdminProductsManager() {
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<Partial<Product>>({ locale: "ko" });
@@ -35,12 +32,6 @@ export default function AdminProductsManager() {
     if (filter.toLowerCase() === "all") return true;
     const key = (product.category ?? "").toString().toLowerCase();
     return key === filter.toLowerCase();
-  };
-
-  const resolveImageUrl = (url?: string) => {
-    if (!url) return "";
-    if (url.startsWith("http") || url.startsWith("data:")) return url;
-    return `${CMS}${url}`;
   };
 
   // 상품 목록 불러오기 (에러 안전)
@@ -79,8 +70,8 @@ export default function AdminProductsManager() {
         .map((d) => {
           const attrs = (d && typeof d === "object" && "attributes" in d ? (d as any).attributes : d) ?? {};
 
-          const imageField = attrs?.image;
-          let image: { id: number | undefined; url: string } | undefined;
+          const imageField = attrs?.image ?? attrs?.image_url ?? attrs?.imageUrl ?? d?.image_url;
+          let image: { id: number | string | undefined; url: string } | undefined;
           if (Array.isArray(imageField) && imageField.length > 0) {
             const first = imageField[0];
             if (first?.url) {
@@ -93,7 +84,16 @@ export default function AdminProductsManager() {
               image = { id: mediaData?.id, url };
             }
           } else if (typeof imageField === "string" && imageField.length > 0) {
-            image = { id: undefined, url: imageField };
+            image = { id: imageField, url: imageField };
+          } else if (imageField?.url) {
+            image = { id: imageField?.id ?? imageField?.url, url: imageField.url };
+          }
+
+          if (!image) {
+            const supabaseUrl = attrs?.image_url ?? d?.image_url;
+            if (typeof supabaseUrl === "string" && supabaseUrl.length > 0) {
+              image = { id: supabaseUrl, url: supabaseUrl };
+            }
           }
 
           return {
@@ -103,7 +103,7 @@ export default function AdminProductsManager() {
             price: Number(attrs?.price ?? 0),
             category: attrs?.category ?? undefined,
             description: attrs?.description ?? undefined,
-            orderFormUrl: attrs?.orderFormUrl ?? undefined,
+            orderFormUrl: attrs?.orderFormUrl ?? attrs?.order_form_url ?? d?.order_form_url ?? undefined,
             image,
             locale: attrs?.locale ?? d?.locale ?? "ko",
           };
@@ -151,11 +151,12 @@ export default function AdminProductsManager() {
     setLoading(true);
     try {
       // 이미지 새로 선택했으면 업로드
-      let imageId = form.image?.id;
+      let nextImage = form.image;
       const anyForm = form as any;
       if (anyForm.newImageFile instanceof File) {
         const uploaded = await handleImageUpload(anyForm.newImageFile);
-        imageId = uploaded.id;
+        nextImage = { id: uploaded.id, url: uploaded.url };
+        setForm((prev) => ({ ...prev, image: nextImage }));
       }
 
       const payload = {
@@ -164,7 +165,8 @@ export default function AdminProductsManager() {
         description: form.description ?? null,
         orderFormUrl: form.orderFormUrl ?? null,
         category: form.category ?? null,
-        imageId: imageId ?? null,
+        imageId: typeof nextImage?.id === "number" ? nextImage.id : null,
+        imageUrl: nextImage?.url ?? null,
         locale: form.locale ?? "ko",
       };
 
@@ -347,9 +349,9 @@ export default function AdminProductsManager() {
               editing?.id === p.id ? "ring-2 ring-orange-400" : ""
             }`}
           >
-            {p.image && (
+            {p.image?.url && (
               <img
-                src={resolveImageUrl(p.image.url)}
+                src={p.image.url}
                 alt={p.name}
                 className="rounded mb-2 w-full aspect-square object-cover"
               />

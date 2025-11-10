@@ -2,63 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import type { NormalizedProductPayload } from "@/lib/fallbackStore";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 // 목록
 export async function GET(req: NextRequest) {
   const targetLang = (req.nextUrl.searchParams.get("lang") ?? DEFAULT_LANGUAGE) as LanguageCode;
-  const strapiUrl = process.env.STRAPI_URL?.replace(/\/+$/, "");
-  const strapiToken = process.env.STRAPI_API_TOKEN || process.env.STRAPI_TOKEN;
 
-  if (!strapiUrl || !strapiToken) {
-    console.error("STRAPI connection info missing", {
-      hasUrl: Boolean(strapiUrl),
-      hasToken: Boolean(strapiToken),
-    });
+  try {
+    const supabase = supabaseAdmin();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = data ?? [];
+    if (targetLang !== DEFAULT_LANGUAGE) {
+      await applyTranslations(rows, targetLang);
+    }
+
+    return NextResponse.json(
+      {
+        data: rows,
+        meta: { source: "supabase", count: rows.length },
+      },
+      { status: 200 }
+    );
+  } catch (e) {
+    console.error("GET /products failed:", e);
     const { serializeProductCollection } = await import("@/lib/fallbackStore");
     const payload = serializeProductCollection();
     if (targetLang !== DEFAULT_LANGUAGE && Array.isArray(payload?.data)) {
       await applyTranslations(payload.data, targetLang);
     }
     return NextResponse.json(payload, { status: 200 });
-  }
-
-  try {
-    console.log("Fetching products from Strapi:", `${strapiUrl}/api/products?populate=*`);
-    const r = await fetch(`${strapiUrl}/api/products?populate=*`, {
-      headers: { Authorization: `Bearer ${strapiToken}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    });
-    console.log("Strapi products status:", r.status);
-    const text = await r.text();
-    if (!text || text.trim().length === 0) {
-      return NextResponse.json(
-        { data: [], meta: { source: "strapi", count: 0 } },
-        { status: r.status }
-      );
-    }
-    try {
-      const json = JSON.parse(text);
-      if (targetLang !== DEFAULT_LANGUAGE && Array.isArray(json?.data)) {
-        await applyTranslations(json.data, targetLang);
-      }
-      if (r.ok) {
-        return NextResponse.json(json, { status: r.status });
-      }
-      return NextResponse.json(json, { status: r.status });
-    } catch {
-      console.error("GET /products non-JSON:", text);
-      return NextResponse.json({ error: text }, { status: r.status });
-    }
-  } catch (e: any) {
-    console.error("GET /products failed:", e);
-    return NextResponse.json(
-      {
-        error: "strapi_fetch_failed",
-        message: e?.message ?? "Unknown error",
-      },
-      { status: 502 }
-    );
   }
 }
 
@@ -108,12 +88,16 @@ async function applyTranslations(items: any[], targetLang: LanguageCode) {
 // 생성
 export async function POST(req: NextRequest) {
   let payload: NormalizedProductPayload;
-  const strapiUrl = process.env.STRAPI_URL?.replace(/\/+$/, "");
-  const strapiToken = process.env.STRAPI_TOKEN;
+  let imageUrlForSupabase: string | null = null;
 
   try {
     const body = await req.json();
-    const { name, price, description, orderFormUrl, category, imageId, locale } = body;
+    const { name, price, description, orderFormUrl, category, imageId, imageUrl, locale } = body;
+    if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      imageUrlForSupabase = imageUrl;
+    } else if (typeof imageId === "string" && imageId.startsWith("http")) {
+      imageUrlForSupabase = imageId;
+    }
     payload = {
       name: typeof name === "string" ? name : "",
       price: typeof price === "number" ? price : Number(price),
@@ -146,54 +130,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_name" }, { status: 400 });
   }
 
-  if (!strapiUrl || !strapiToken) {
-    const { createFallbackProduct } = await import("@/lib/fallbackStore");
-    const fallback = createFallbackProduct(normalizedPayload);
-    return NextResponse.json(fallback, { status: 201 });
-  }
-
   try {
-    const data: any = {
+    const supabase = supabaseAdmin();
+    const insertPayload = {
       name: normalizedPayload.name,
       price: normalizedPayload.price,
       description: normalizedPayload.description,
-      orderFormUrl: normalizedPayload.orderFormUrl,
+      order_form_url: normalizedPayload.orderFormUrl,
       category: normalizedPayload.category,
-      publishedAt: new Date().toISOString(),
+      locale: normalizedPayload.locale ?? "ko",
+      image_url: imageUrlForSupabase,
     };
-    if (
-      normalizedPayload.imageId !== null &&
-      Number.isFinite(normalizedPayload.imageId)
-    ) {
-      data.image = normalizedPayload.imageId;
+
+    const { data, error } = await supabase.from("products").insert(insertPayload).select().single();
+    if (error) {
+      throw error;
     }
 
-    const r = await fetch(`${strapiUrl}/api/products`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${strapiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ data }),
-    });
-
-    const text = await r.text();
-    if (!text || text.trim().length === 0) {
-      return NextResponse.json(
-        { data: null, meta: { source: "strapi" } },
-        { status: r.status }
-      );
-    }
-    try {
-      const json = JSON.parse(text);
-      return NextResponse.json(json, { status: r.status });
-    } catch {
-      console.error("POST /products non-JSON:", text);
-      return NextResponse.json({ error: text }, { status: r.status });
-    }
+    return NextResponse.json(
+      { data, meta: { source: "supabase" } },
+      { status: 201 }
+    );
   } catch (e: any) {
     console.error("POST /products failed:", e);
-    return NextResponse.json({ error: "strapi_create_failed" }, { status: 502 });
+    const { createFallbackProduct } = await import("@/lib/fallbackStore");
+    const fallback = createFallbackProduct(normalizedPayload);
+    return NextResponse.json(fallback, { status: 201 });
   }
 }
 

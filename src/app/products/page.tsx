@@ -2,30 +2,7 @@ import ProductGrid from "@/components/ProductGrid";
 import type { Product } from "@/types/product";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
-
-type StrapiItem = {
-  id: number;
-  attributes?: {
-    name?: string;
-    price?: number;
-    description?: string | null;
-    category?: string | null;
-    orderFormUrl?: string | null;
-    image?: { data?: { attributes?: { url?: string } } | null };
-  };
-  name?: string;
-  price?: number;
-  description?: string | null;
-  category?: string | null;
-  orderFormUrl?: string | null;
-  image?:
-    | { data?: { attributes?: { url?: string } } | null }
-    | Array<{ url?: string; id?: number }>
-    | string
-    | null;
-};
-
-const CMS = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:1337";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 const CATEGORY_PARAM_MAP: Record<string, string> = {
   food: "Food",
@@ -46,64 +23,50 @@ export default async function ProductsPage({
       ? searchParams.category
       : "all";
   const categoryParam = raw.toLowerCase();
-  const strapiCategory = CATEGORY_PARAM_MAP[categoryParam];
+  const mappedCategory = CATEGORY_PARAM_MAP[categoryParam];
   const targetLang = (typeof searchParams?.lang === "string"
     ? searchParams.lang
     : DEFAULT_LANGUAGE) as LanguageCode;
 
-  // ✅ 쿼리 문자열 구성
-  const url =
-    categoryParam === "all" || !strapiCategory || strapiCategory === "all"
-      ? `${CMS}/api/products?populate=*`
-      : `${CMS}/api/products?populate=*&filters[category][$eq]=${strapiCategory}`;
-
-  // ✅ fetch 시도
-  let json: any = {};
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    json = await res.json();
-  } catch (err) {
-    console.error("⚠️ Fetch failed:", err);
+  // ✅ Supabase에서 상품 조회
+  const supabase = supabaseAdmin();
+  let query = supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (
+    mappedCategory &&
+    mappedCategory !== "all" &&
+    categoryParam !== "all"
+  ) {
+    query = query.eq("category", mappedCategory);
   }
 
-  // ✅ 안전하게 data 처리
-  const data: StrapiItem[] = Array.isArray(json?.data) ? json.data : [];
+  let rows: any[] = [];
+  try {
+    const { data, error } = await query;
+    if (error) throw error;
+    rows = data ?? [];
+  } catch (err) {
+    console.error("⚠️ Supabase fetch failed:", err);
+  }
 
-  const products: Product[] = data
-    .map((it) => {
-      const attrs = it.attributes ?? it;
-
-      let imageUrl: string | null = null;
-      const imageField = attrs?.image;
-      if (Array.isArray(imageField) && imageField.length > 0) {
-        imageUrl = imageField[0]?.url ?? null;
-      } else if (
-        typeof imageField === "object" &&
-        imageField !== null &&
-        "data" in imageField &&
-        (imageField as any)?.data?.attributes?.url
-      ) {
-        imageUrl = (imageField as any).data.attributes.url;
-      } else if (typeof imageField === "string") {
-        imageUrl = imageField;
-      }
-
-      return {
-        id: it.id,
-        name: attrs?.name ?? "",
-        price: Number(attrs?.price ?? 0),
-        description: attrs?.description ?? null,
-        category: attrs?.category ?? null,
-        orderFormUrl: attrs?.orderFormUrl ?? null,
-        image: imageUrl ? { url: imageUrl.startsWith("http") ? imageUrl : `${CMS}${imageUrl}` } : null,
-      } satisfies Product;
-    })
-    .filter((p) => Boolean(p.name));
+  const products: Product[] = rows
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? "",
+      price: Number(row.price ?? 0),
+      description: row.description ?? null,
+      category: row.category ?? null,
+      orderFormUrl: row.order_form_url ?? row.orderFormUrl ?? null,
+      image: row.image_url ? { url: row.image_url } : null,
+    }))
+    .filter((p) => p.name);
 
   let headingText =
     categoryParam === "all"
       ? "All Products"
-      : strapiCategory ?? categoryParam;
+      : mappedCategory ?? categoryParam;
   let emptyStateText = "No products found.";
 
   if (targetLang !== DEFAULT_LANGUAGE) {

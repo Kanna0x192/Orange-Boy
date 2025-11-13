@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { NormalizedProductPayload } from "@/lib/fallbackStore";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
-import { supabaseAdmin } from "lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 // 목록
 export async function GET(req: NextRequest) {

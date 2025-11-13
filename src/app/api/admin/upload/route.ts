@@ -1,7 +1,7 @@
 import { Buffer } from "buffer";
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET ?? "product-images";
 

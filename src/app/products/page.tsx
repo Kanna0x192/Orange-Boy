@@ -107,3 +107,7 @@ export default async function ProductsPage({
     </main>
   );
 }
+
+// 👇 캐시 비활성화 (이 두 줄 추가!)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;

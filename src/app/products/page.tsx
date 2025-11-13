@@ -2,7 +2,7 @@ import ProductGrid from "@/components/ProductGrid";
 import type { Product } from "@/types/product";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 const CATEGORY_PARAM_MAP: Record<string, string> = {
   food: "Food",
@@ -28,10 +28,11 @@ export default async function ProductsPage({
     ? searchParams.lang
     : DEFAULT_LANGUAGE) as LanguageCode;
 
-  // ✅ Supabase에서 직접 데이터 가져오기
+  // Supabase에서 직접 데이터 가져오기
   let products: Product[] = [];
 
   try {
+    const supabase = supabaseAdmin();
     let query = supabase
       .from("products")
       .select("*")
@@ -93,7 +94,7 @@ export default async function ProductsPage({
     emptyStateText = translatedEmpty ?? emptyStateText;
   }
 
-  // ✅ 페이지 렌더링
+  // 페이지 렌더링
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <h2 className="text-2xl font-bold text-orange-600 mb-6 capitalize">

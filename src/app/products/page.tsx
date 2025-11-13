@@ -17,7 +17,6 @@ export default async function ProductsPage({
 }: {
   searchParams?: { [key: string]: string | string[] | undefined };
 }) {
-  // ✅ category 파라미터 처리
   const raw =
     typeof searchParams?.category === "string"
       ? searchParams.category
@@ -28,7 +27,6 @@ export default async function ProductsPage({
     ? searchParams.lang
     : DEFAULT_LANGUAGE) as LanguageCode;
 
-  // Supabase에서 직접 데이터 가져오기
   let products: Product[] = [];
 
   try {
@@ -38,7 +36,6 @@ export default async function ProductsPage({
       .select("*")
       .order("created_at", { ascending: false });
 
-    // 카테고리 필터
     if (categoryParam !== "all" && strapiCategory && strapiCategory !== "all") {
       query = query.eq("category", strapiCategory);
     }
@@ -94,7 +91,6 @@ export default async function ProductsPage({
     emptyStateText = translatedEmpty ?? emptyStateText;
   }
 
-  // 페이지 렌더링
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <h2 className="text-2xl font-bold text-orange-600 mb-6 capitalize">

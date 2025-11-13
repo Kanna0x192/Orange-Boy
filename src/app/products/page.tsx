@@ -2,7 +2,7 @@ import ProductGrid from "@/components/ProductGrid";
 import type { Product } from "@/types/product";
 import { translateTexts } from "@/lib/translate";
 import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/language";
-import { supabaseAdmin } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 const CATEGORY_PARAM_MAP: Record<string, string> = {
   food: "Food",
@@ -23,50 +23,46 @@ export default async function ProductsPage({
       ? searchParams.category
       : "all";
   const categoryParam = raw.toLowerCase();
-  const mappedCategory = CATEGORY_PARAM_MAP[categoryParam];
+  const strapiCategory = CATEGORY_PARAM_MAP[categoryParam];
   const targetLang = (typeof searchParams?.lang === "string"
     ? searchParams.lang
     : DEFAULT_LANGUAGE) as LanguageCode;
 
-  // ✅ Supabase에서 상품 조회
-  const supabase = supabaseAdmin();
-  let query = supabase
-    .from("products")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (
-    mappedCategory &&
-    mappedCategory !== "all" &&
-    categoryParam !== "all"
-  ) {
-    query = query.eq("category", mappedCategory);
-  }
+  // ✅ Supabase에서 직접 데이터 가져오기
+  let products: Product[] = [];
 
-  let rows: any[] = [];
   try {
-    const { data, error } = await query;
-    if (error) throw error;
-    rows = data ?? [];
-  } catch (err) {
-    console.error("⚠️ Supabase fetch failed:", err);
-  }
+    let query = supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const products: Product[] = rows
-    .map((row) => ({
-      id: row.id,
-      name: row.name ?? "",
-      price: Number(row.price ?? 0),
-      description: row.description ?? null,
-      category: row.category ?? null,
-      orderFormUrl: row.order_form_url ?? row.orderFormUrl ?? null,
-      image: row.image_url ? { url: row.image_url } : null,
-    }))
-    .filter((p) => p.name);
+    // 카테고리 필터
+    if (categoryParam !== "all" && strapiCategory && strapiCategory !== "all") {
+      query = query.eq("category", strapiCategory);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    products = (data || []).map((item: any) => ({
+      id: item.id,
+      name: item.name || "",
+      price: Number(item.price || 0),
+      description: item.description || null,
+      category: item.category || null,
+      orderFormUrl: item.order_form_url || null,
+      image: item.image_url ? { url: item.image_url } : null,
+    }));
+  } catch (err) {
+    console.error("⚠️ Fetch failed:", err);
+  }
 
   let headingText =
     categoryParam === "all"
       ? "All Products"
-      : mappedCategory ?? categoryParam;
+      : strapiCategory ?? categoryParam;
   let emptyStateText = "No products found.";
 
   if (targetLang !== DEFAULT_LANGUAGE) {
